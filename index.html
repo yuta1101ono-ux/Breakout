@@ -113,6 +113,8 @@ bricks[5][3].multi=true;
 }
 
 /* スタート */
+btn.addEventListener("touchstart",()=>{}, {once:true});
+  
 btn.onclick=()=>{
 btn.style.display="none";
 if(audioCtx) audioCtx.resume();
