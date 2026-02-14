@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,user-scalable=no">
+<title>Breakout Complete</title>
+
+<style>
+body{
+margin:0;
+background:black;
+overflow:hidden;
+touch-action:none;
+font-family:sans-serif;
+}
+canvas{
+display:block;
+background:black;
+}
+#btn{
+position:fixed;
+left:50%;
+top:58%;
+transform:translate(-50%,-50%);
+font-size:22px;
+padding:12px 26px;
+z-index:5;
+}
+</style>
+
+</head>
+
+<body>
+
+<button id="btn">START</button> <canvas id="game"></canvas>
+
+<script>
+const canvas=document.getElementById("game");
+const ctx=canvas.getContext("2d");
+const btn=document.getElementById("btn");
+
+/* 画面 */
+function resize(){
+canvas.width=window.innerWidth;
+canvas.height=window.innerHeight;
+paddleWidth=canvas.width*0.28;
+}
+resize();
+window.addEventListener("resize",resize);
+
+/* 音 */
+let audioCtx;
+function sound(freq,time){
+if(!audioCtx) audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+const o=audioCtx.createOscillator();
+const g=audioCtx.createGain();
+o.frequency.value=freq;
+o.type="square";
+o.connect(g);
+g.connect(audioCtx.destination);
+g.gain.value=0.2;
+o.start();
+g.gain.exponentialRampToValueAtTime(0.001,audioCtx.currentTime+time);
+o.stop(audioCtx.currentTime+time);
+}
+
+/* 状態 */
+let state="start";
+let score=0;
+let lives=3;
+
+/* パドル */
+let paddleWidth=120;
+let paddleHeight=14;
+let paddleX=0;
+
+canvas.addEventListener("touchmove",e=>{
+paddleX=e.touches[0].clientX-paddleWidth/2;
+});
+
+/* ボール */
+const R=7;
+let balls=[];
+
+function addBall(x,y){
+balls.push({
+x:x,
+y:y,
+dx:(Math.random()*2-1)*4,
+dy:-4
+});
+}
+
+/* ブロック */
+const rows=6,cols=7;
+let bricks=[];
+let bw,bh,pad=4,top=80;
+
+function initBricks(){
+bw=canvas.width/cols-6;
+bh=22;
+bricks=[];
+for(let c=0;c<cols;c++){
+bricks[c]=[];
+for(let r=0;r<rows;r++){
+bricks[c][r]={alive:true,multi:false};
+}
+}
+bricks[1][1].multi=true;
+bricks[3][2].multi=true;
+bricks[5][3].multi=true;
+}
+
+/* スタート */
+btn.onclick=()=>{
+btn.style.display="none";
+if(audioCtx) audioCtx.resume();
+
+score=0;
+lives=3;
+balls=[];
+addBall(canvas.width/2,canvas.height-140);
+initBricks();
+state="play";
+};
+
+/* 衝突 */
+function collision(){
+for(let i=balls.length-1;i>=0;i--){
+let ball=balls[i];
+
+for(let c=0;c<cols;c++){
+for(let r=0;r<rows;r++){
+let b=bricks[c][r];
+if(!b.alive)continue;
+
+let bx=c*(bw+pad)+3;
+let by=r*(bh+pad)+top;
+
+if(ball.x>bx&&ball.x<bx+bw&&ball.y>by&&ball.y<by+bh){
+b.alive=false;
+ball.dy*=-1;
+score+=balls.length;
+sound(700,0.07);
+
+if(b.multi){
+addBall(ball.x,ball.y);
+addBall(ball.x,ball.y);
+sound(1200,0.1);
+}
+}
+}}
+}}
+
+/* 更新 */
+function update(){
+for(let i=balls.length-1;i>=0;i--){
+let b=balls[i];
+
+if(b.x<R||b.x>canvas.width-R){b.dx*=-1;sound(300,0.03);}
+if(b.y<R){b.dy*=-1;sound(300,0.03);}
+
+if(b.y>canvas.height-30){
+if(b.x>paddleX&&b.x<paddleX+paddleWidth){
+let hit=(b.x-(paddleX+paddleWidth/2))/(paddleWidth/2);
+b.dx=hit*6;
+b.dy=-Math.abs(b.dy);
+sound(500,0.05);
+}else if(b.y>canvas.height){
+balls.splice(i,1);
+score=Math.max(0,score-5);
+sound(120,0.2);
+}
+}
+
+b.x+=b.dx;
+b.y+=b.dy;
+}
+
+if(balls.length===0){
+lives--;
+if(lives>0){
+addBall(canvas.width/2,canvas.height-140);
+}else{
+state="over";
+btn.innerText="RETRY";
+btn.style.display="block";
+}
+}
+}
+
+/* 描画 */
+function draw(){
+ctx.clearRect(0,0,canvas.width,canvas.height);
+
+if(state==="start"){
+ctx.fillStyle="white";
+ctx.font="32px sans-serif";
+ctx.fillText("BREAKOUT",canvas.width/2-90,canvas.height/2-80);
+requestAnimationFrame(draw);
+return;
+}
+
+if(state==="over"){
+ctx.fillStyle="white";
+ctx.font="34px sans-serif";
+ctx.fillText("GAME OVER",canvas.width/2-110,canvas.height/2-40);
+ctx.fillText("Score:"+score,canvas.width/2-70,canvas.height/2+10);
+requestAnimationFrame(draw);
+return;
+}
+
+collision();
+update();
+
+/* ブロック */
+for(let c=0;c<cols;c++){
+for(let r=0;r<rows;r++){
+let b=bricks[c][r];
+if(!b.alive)continue;
+let x=c*(bw+pad)+3;
+let y=r*(bh+pad)+top;
+ctx.fillStyle=b.multi?"orange":"cyan";
+ctx.fillRect(x,y,bw,bh);
+}}
+
+/* パドル */
+ctx.fillStyle="white";
+ctx.fillRect(paddleX,canvas.height-25,paddleWidth,paddleHeight);
+
+/* ボール */
+ctx.fillStyle="white";
+for(let b of balls){
+ctx.beginPath();
+ctx.arc(b.x,b.y,R,0,Math.PI*2);
+ctx.fill();
+}
+
+/* UI */
+ctx.font="18px sans-serif";
+ctx.fillText("Score:"+score,10,24);
+ctx.fillText("Lives:"+lives,10,46);
+
+/* クリア判定 */
+let remain=0;
+for(let c=0;c<cols;c++)
+for(let r=0;r<rows;r++)
+if(bricks[c][r].alive)remain++;
+
+if(remain===0){
+state="over";
+btn.innerText="CLEAR! RETRY";
+btn.style.display="block";
+}
+
+requestAnimationFrame(draw);
+}
+
+draw();
+</script>
+
+</body>
+</html>
